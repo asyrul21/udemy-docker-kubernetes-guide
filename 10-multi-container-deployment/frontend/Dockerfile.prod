@@ -1,0 +1,32 @@
+FROM node:14-alpine as build
+
+WORKDIR /app
+
+COPY package.json .
+
+RUN npm install
+
+COPY . .
+
+RUN npm run build
+
+#
+# MULTI STAGE BUILD
+#
+FROM nginx:stable-alpine
+
+# If you do not wish to use custom nginx config:
+# COPY --from=build /app/build /usr/share/nginx/html
+
+# for custom nginx config:
+COPY --from=build /app/build /var/www/html
+
+COPY --from=build /app/nginx /etc/nginx/conf.d
+
+RUN mv /etc/nginx/conf.d/nginx.conf /etc/nginx/conf.d/default.conf
+# for custom nginx config ENDS
+
+EXPOSE 3000
+
+CMD ["nginx", "-g", "daemon off;"]
+

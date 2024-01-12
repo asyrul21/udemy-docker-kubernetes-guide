@@ -13,7 +13,7 @@ docker-compose run --rm composer create-project --prefer-dist laravel/laravel=8.
 docker-compose up -d --build server
 
 # artisan
-docker-compose run --rm artisan migrate
+docker-compose run --rm --build artisan migrate
 
 # localhost:8000
 ```
