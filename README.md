@@ -1090,9 +1090,19 @@ General Concepts:
 
 - One or more Application Containers and their Resources (Volumes, IP, configs etc)
 
+- Usually, 1 Container per Pod
+
 - Created and managed by K8s
 
-2. Worker Nodes
+- Usually not created and managed manually. We use `Deployment Object` which creates, controls, and manages Pods.
+
+2. Service
+
+- A service groups PODS together, and gives them a shared IP
+
+- Allows external access to Pods
+
+3. Worker Nodes
 
 - Similar remote machine concept
 
@@ -1104,7 +1114,7 @@ General Concepts:
 
 - Has `Kube-Proxy` to manage network communication between Node and Pod
 
-3. Master Node
+4. Master Node
 
 - Manage Worker Nodes with The Control Plane
 
@@ -1116,11 +1126,11 @@ General Concepts:
 
 - `Cloud-Controller-Manager`
 
-4. Cluster
+5. Cluster
 
 - A Collection of Node Machines (Master Node + Worker Nodes)
 
-5. `kubectl` to send intructions to the Cluster.
+6. `kubectl` to send intructions to the Cluster.
 
 ## Setup Mini Cluster Locally using [Minikube](https://minikube.sigs.k8s.io/docs/start/)
 
@@ -1146,10 +1156,10 @@ brew install minikube
 
 ```bash
 minikube start --driver=virtualbox
-
 # OR
-
 minikube start --driver=docker
+# for Windows
+minikube start --driver=hyperv
 ```
 
 Check status:
@@ -1158,6 +1168,312 @@ Check status:
 minikube status
 
 minikube dashboard
+```
+
+## kubectl Commands (Imperative)
+
+### Help
+
+```bash
+kubectl --help
+
+kubectl [command] --help
+# kubectl create --help
+```
+
+### View
+
+```bash
+# deployments
+kubectl get deployments
+# pods
+kubectl get pods
+# get services
+kubectl get services
+```
+
+### Create
+
+```bash
+
+# Create a New Deployment Object
+# Sends a docker image to the Kubernetes Cluster aka the Master Node and Control Plane
+kubectl create deployment [name] --image=[published image registry]
+# kubectl create deployment first-app --image=user/kub-first-app
+
+# Create a service
+kubectl create service
+```
+
+### Expose
+
+Automatically creates a Service to contain the Pod.
+
+Types of expose:
+
+1. ClusterIP - default - internal only
+2. NodePort
+3. LoadBalancer
+
+```bash
+# Create a service for the pod and expose it to external access
+kubectl expose deployment [deployment name] --type=[expose type] --port=[exposed port]
+# kubectl expose deployment first-app --type=LoadBalancer --port=8080
+```
+
+### Scale
+
+```bash
+kubectl scale [deployment or service]/[deployment app] --replicas=3
+# kubectl scale deployment/first-app --replicas=3
+
+# check
+kubectl get pods
+```
+
+### Set
+
+Update a specific deployment with an updated Image.
+
+You need to find the Pod's Container Name:
+
+1. On `minikube dashboard`, got to Pods > Click on Your Pod
+
+2. Scroll down and under `Containers`, you will se the container name.
+
+IMPORTANT: The image will only be updated in the Pod if the new image has a different tag.
+
+```bash
+kubectl set image [deployment or service]/[deployment name]  [pod container name]=[registry]
+# kubectl set image deployment/first-app kub-first-app=user/kub-first-app:2
+
+# you will get this message:
+# deployment.apps/first-app image updated
+
+# check
+kubectl rollout status deployment/first-app
+```
+
+### Rollout
+
+```bash
+#
+# Get rollout (POD Update) status.
+#
+kubectl rollout status [deployment or service]/[deployment name]
+# kubectl rollout status deployment/first-app
+
+#
+# Rollback / Undo Rollout / Pod Update
+#
+kubectl rollout undo [deployment or service]/[deployment name]
+# rollback to specific revision version
+kubectl rollout undo [deployment or service]/[deployment name] --to-revision
+# kubectl rollout undo deployment/first-app
+# kubectl rollout undo deployment/first-app --to-revision=1
+
+# View Rollout History
+kubectl rollout history [deployment or service]/[deployment name]
+# kubectl rollout history deployment/first-app
+kubectl rollout history [deployment or service]/[deployment name] --revision=[revision number]
+# kubectl rollout history deployment/first-app --revision=1
+```
+
+### Delete
+
+```bash
+# delete deployment
+kubectl delete deployment [name]
+
+# delete service
+kubectl delete service [name]
+
+# delete using a config yaml file
+kubctl delete -f=[filename]
+# kubectl delete -f=deployment.yaml
+# kubectl delete -f=service.yaml
+# delete multiple
+# kubectl delete -f=deployment.yaml,service.yml
+# OR
+# kubectl delete -f=deployment.yaml -f=service.yaml
+```
+
+### Apply
+
+Use a config file to apply conifiguration commands to create Deployment or Service Objects.
+
+If you update any of your yaml files, simplu run `apply` again to reflect those changes.
+
+```bash
+kubectl apply -f=[config file]
+# kubectl apply -f=deployment.yaml
+# kubectl apply -f=service.yaml
+```
+
+## Kubernetes Config Files (Declarative)
+
+### Deployment Object
+
+[Official API Reference](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/)
+
+```yaml
+#
+# Kubernetes Deployment API version
+#
+apiVersion: app/v1
+#
+# kind - what do you wan to create
+#
+kind: Deployment
+#
+# metadata: to give your deployment a name, etc
+#
+metadata:
+  name: second-app-deployment
+#
+# spec: the specification to add Pods and Containers
+#
+spec:
+  #
+  # replicas: no. of pod instances (scaling)
+  #
+  replicas: 1
+  #
+  # Selector: a required field
+  #
+  selector:
+   #
+   # match labels - bind/connect pods with this Deployment Object.
+   # By using labels you created in template.metadata.labels
+   #
+   matchLabels:
+      app: second-app
+      tier: backend
+   # more complex labels
+   # matchExpressions:
+   #    - {key: app, operator: In, values: [second-app, first-app]}
+  #
+  # template: template or image for Pod
+  #
+  template:
+    #
+    # template metadata
+    #
+    metadata:
+      #
+      # labels - can have one or more labels
+      #
+      labels:
+        app: second-app
+        tier: backend
+    #
+    # specification of pod
+    #
+    spec:
+      #
+      # Define container(s). Every Pod can have multiple containers
+      #
+      containers:
+         #
+         # container name
+         #
+         - name: second-node
+         #
+         # published image: auto update if provide :latest
+         #
+         image: user/kub-first-app:2
+         #
+         # imagePullPolicy: Always or Never or ..
+         #
+         imagePullPolicy: Always
+         #
+         # livenessProbe (optional): how to check pod health
+         #
+         livenessProbe:
+            httpGet:
+               path: /
+               port: 8080
+            periodSeconds: 3
+            initialDelaySeconds: 5
+         #
+         # - name: third-container
+         #    image: sample-image
+```
+
+### Service Object
+
+[Official API Reference](https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/)
+
+```yaml
+#
+# Kubernetes Service API version
+#
+apiVersion: v1
+#
+# kind - what do you wan to create
+#
+kind: Service
+#
+# metadata: to give your service a name, etc
+#
+metadata:
+  name: backend-service
+#
+# spec: the specification to connect your Service to your PODS
+#
+spec:
+  #
+  # selector: to select your pods using the labels
+  # you deifned in Deployment.
+  #
+  # You do NOT need to select ALL labels.
+  #
+  selector:
+    app: second-app
+    #  tier: backend
+   #
+   # PORTS: ports configuration. Can have multiple.
+   #
+   ports:
+      - protocol: 'TCP'
+         #
+         # host port
+         #
+         port: 80
+         #
+         # internal / cluster port
+         #
+         targetPort: 8080
+      # - protocol: 'TCP'
+      #   port: 443
+      #   targetPort: 443
+   #
+   # Service Type: ClusterIP or NodePort or LoadBalancer
+   #
+   type: LoadBalancer
+```
+
+### Merging Deployment and Service Configs
+
+View `12-kubernetes-declarative/merged-deployment.yaml`
+
+Better practice to create the Service First
+
+Seperate config types with triple dash: `---`
+
+## minikube Commands
+
+### Service
+
+Get externally accessible IP for a Service running in Minikube VM
+
+```bash
+# check your serices
+kubectl get services
+
+# get the externally accessible IP
+minikube service [service name]
+# minikube service first-app
 ```
 
 # References
