@@ -1162,6 +1162,12 @@ minikube start --driver=docker
 minikube start --driver=hyperv
 ```
 
+4. Stop Minikube
+
+```bash
+minikube stop
+```
+
 Check status:
 
 ```bash
@@ -1183,14 +1189,23 @@ kubectl [command] --help
 
 ### View
 
-```bash
+````bash
 # deployments
 kubectl get deployments
 # pods
 kubectl get pods
 # get services
 kubectl get services
-```
+# get storage classes
+kubectl get sc
+# get persistent volumes
+kubectl get pv
+# get persistent volume claims
+kubectl get pvc
+# get config map
+kubectl get configmap
+# get namespaces
+kubectl get namespaces
 
 ### Create
 
@@ -1203,7 +1218,7 @@ kubectl create deployment [name] --image=[published image registry]
 
 # Create a service
 kubectl create service
-```
+````
 
 ### Expose
 
@@ -1310,11 +1325,26 @@ kubectl apply -f=[config file]
 # kubectl apply -f=service.yaml
 ```
 
+### Force Update A Deployment to User Latest Image
+
+If you made changes to the `deployments.yaml` file, you can simple run `kubectl apply -f=deployment.yaml`
+
+However, if you did not change the `deployments.yaml`, and your image has been updated, first delete the deployment:
+
+```bash
+cd kubernetes/ # your folder
+kubectl delete -f=deployment.yaml
+```
+
+Then re apply with `kubectl apply -f=deployment.yaml`
+
 ## Kubernetes Config Files (Declarative)
 
 ### Deployment Object
 
 [Official API Reference](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/)
+
+[Volume Types](https://kubernetes.io/docs/concepts/storage/volumes/)
 
 ```yaml
 #
@@ -1396,11 +1426,86 @@ spec:
             periodSeconds: 3
             initialDelaySeconds: 5
          #
+         # Environment Variables
+         #
+         env:
+            -  name: STORY_FOLDER
+               value: story
+            #
+            # using configMap:
+            #
+            -  name: STORY_FOLDER
+               valueFrom:
+                  #
+                  # the key of data defined in your ConfigMap
+                  #
+                  configMapKeyRef:
+                     #
+                     # name: name of your configMap
+                     #
+                     name: data-store-env
+                     #
+                     # key: the key name of the variable
+                     #
+                     key: folder
+         #
+         # VOLUME BINDING - declare top level volumes first
+         #
+         volumeMounts:
+            #
+            # mountPath: internal container path of directory which you
+            # would like to persist.
+            # Check your Dockerfile WORKDIR
+            #
+            -  mountPath: /app/story
+               #
+               # name: pointing to volume you defined at top level
+               #
+               name: story-volume
+         #
+         #
          # - name: third-container
          #    image: sample-image
+      #
+      # VOLUMES
+      #
+      volumes:
+         -  name: story-volume
+            #
+            # use the Volume Type as key
+            #
+            # using emptyDir:
+            #
+            # emptyDir: {}
+            #
+            # OR: Using hostPath
+            #
+            # hostPath:
+            #    #
+            #    # path of the host machine to bind
+            #    #
+            #    path: /data
+            #    #
+            #    # type: how path is handled
+            #    #
+            #    type: DirectoryOrCreate
+            #
+            # OR: Claim a Persistent Volume
+            #
+            persistentVolumeClaim:
+               #
+               # claimName: name of the Persistent Volume Claim you defined
+               #
+               claimName: host-pvc
 ```
 
 ### Service Object
+
+Service is needed mainly for:
+
+1. Stable IP Address
+
+2. Potentially exposing the Pod to external communication
 
 [Official API Reference](https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/)
 
@@ -1450,16 +1555,95 @@ spec:
    #
    # Service Type: ClusterIP or NodePort or LoadBalancer
    #
+   # use ClusterIP for internal communication only
+   # use NodePort or LoadBalancer for exposing to public
+   #
    type: LoadBalancer
 ```
 
-### Merging Deployment and Service Configs
+### Persistent Volume Configuration
 
-View `12-kubernetes-declarative/merged-deployment.yaml`
+[Filesystem vs Block](https://www.computerweekly.com/feature/Storage-pros-and-cons-Block-vs-file-vs-object-storage)
 
-Better practice to create the Service First
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: host-pv
+spec:
+  #
+  # max capacity: how much capacity the pods need
+  #
+  capacity:
+    storage: 1Gi
+  #
+  # volume mode: Block or Filesystem
+  #
+  volumeMode: Block
+  #
+  # Storage Class Name: check by running `kubectl get sc`
+  #
+  storageClassName: standard
+  #
+  # access mode: ReadWriteOnce or ReadOnlyMany or ReadWriteMany
+  #
+  accessModes:
+    - ReadWriteOnce # read write by only a single node
+    # - ReadOnlyMany # Read only but accessible by multiple nodes
+    # - ReadWriteMany # Read write by multiple nodes
+  #
+  # type of Volume as key
+  #
+  hostPath:
+    path: /data
+    type: DirectoryOrCreate
+```
 
-Seperate config types with triple dash: `---`
+### Persistent Volume Claim
+
+A `Claim`` is used for each Pod to use a defined Persistent Volume.
+
+We are using Static Provisioning. Read up more about Dynamic Volume Provisioning.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: host-pvc
+spec:
+  #
+  # volumeName: which Persistent Volume that Pod would like to use
+  #
+  volumeName: host-pv
+  #
+  # Access Modes: See #Persistent Volume Configuration
+  #
+  accessModes:
+    - ReadWriteOnce
+  #
+  # resources: which resource you need for this claim.
+  # This should follow the Persistent Volume's capacity.storage
+  #
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+### Config Map
+
+ConfigMaps are essentially .env file to store Environment Variables, but which are used in Kubernetes Object Files. eg. Deployment Object declaration file.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-store-env
+data:
+  #
+  # KEY VALUE PAIRS
+  #
+  STORY_FOLDER: "story"
+```
 
 ## minikube Commands
 
@@ -1476,6 +1660,62 @@ minikube service [service name]
 # minikube service first-app
 ```
 
+## Kubernetes Volumes
+
+Kubernetes Volumes are Pods specific. It survives container restarts, but they are destroyed when pods are deleted.
+
+[Volume Types](https://kubernetes.io/docs/concepts/storage/volumes/)
+
+[Persistent Volumes](https://www.udemy.com/course/docker-kubernetes-the-practical-guide/learn/lecture/22627819): Pod and Node independent Volume solution
+
+Some common types:
+
+1. `emptyDir`: Allows data to persist on container restart / if container crashes and restarted. However, it only lasts as long as the lifetime of the Pod. If the Pod is deleted, data will be lost.
+
+   - if there are more than 1 replica, app would behave strangely.
+
+2. `hostPath`: Creates a binding to host machine. Multiple Pods and Replicas (in the same Node) share the same data volume, hence data will be consistent.
+
+   - if the replica or Pod runs on different Pod, data will still be inconsistent
+
+3. `csi (container storage interface)`: A flexible storage solution which allows integration with multiple third-party storage services eg. AWS EFS.
+
+### Merging Deployment and Service Configs
+
+View `12-kubernetes-declarative/merged-deployment.yaml`
+
+Better practice to create the Service First
+
+Seperate config types with triple dash: `---`
+
+## Kubernetes Network Communication
+
+Two types:
+
+1. Container to Container within the same Pods (Pod Internal Communication)
+
+- You can use `localhost`
+
+- see `14-kubernetes-network-multi-container/kubernetes/users-deployment.yaml`
+
+2. Pod to Pod (Cluster Internal)
+
+- You can use Kubernetes' Global variable: {service name, all caps, dashes replaced with underscores}\_SERVICE_HOST
+
+- EG: `auth-service` => `process.env.AUTH_SERVICE_SERVICE_HOST`
+
+- see `15-kubernetes-network-multi-pod/users-api/users-app.js`
+
+- OR, run `kubectl get services`, and grab the service IP in the ClusterIP column
+
+- OR, use automatically assign internal domain name: `{service-name}.{namespace}`
+
+  Check `kubectl get namespaces` to see which namespace your services are attached to. By default, they are attached to the `default` namespace.
+
+  Therefore, you can use `auth-service.default`
+
+  See `15-kubernetes-network-multi-pod/kubernetes/users-deployment.yaml`
+
 # References
 
 1. [Installing Docker on Linux Servers](https://docs.docker.com/engine/install/)
@@ -1483,3 +1723,28 @@ minikube service [service name]
 2. [AWS Load Balancing](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-load-balancing.html)
 
 3. [Kubermatic](https://www.kubermatic.com/)
+
+4. [Core DNS](https://coredns.io/)
+
+# Other Notes
+
+## Resolving CORS Errors
+
+Add to API/Backend Code:
+
+```js
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  next();
+});
+```
+
+## Frontend Reverse Proxy
+
+Allows requests to be sent to it self.
+
+See `15-kubernetes-network-multi-pod/frontend/conf/nginx.conf`
+
+NGINX Config Files Are Run in the Cluster. Therefore, you need to use Cluster Internal IP. Or, just use automatically assigned domain names.

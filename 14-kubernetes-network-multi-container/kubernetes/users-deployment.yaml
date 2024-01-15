@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: users
+  template:
+    metadata:
+      labels:
+        app: users
+    spec:
+      containers:
+        - name: users
+          image: asyrul21/kub-demo-users:latest
+          env:
+            - name: AUTH_ADDRESS
+              #
+              # Pod Internal Communication
+              #
+              value: localhost
+        #
+        # multi container, in one pod
+        #
+        - name: auth
+          image: asyrul21/kub-demo-auth:latest

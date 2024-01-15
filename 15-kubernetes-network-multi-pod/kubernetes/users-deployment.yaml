@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: users
+  template:
+    metadata:
+      labels:
+        app: users
+    spec:
+      containers:
+        - name: users
+          image: asyrul21/kub-demo-users:latest
+          env:
+            - name: AUTH_ADDRESS
+              #
+              # Pod to Pod Communication
+              #
+              # using ClusterIP:
+              # value: "10.105.236.62"
+              # using automatically assigned domain name:
+              value: "auth-service.default"

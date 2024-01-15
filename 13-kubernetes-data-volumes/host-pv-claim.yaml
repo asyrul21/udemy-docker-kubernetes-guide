@@ -1,0 +1,14 @@
+#
+# a Claim is used for each Pod to use a Persistent Volume
+#
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: host-pvc
+spec:
+  volumeName: host-pv
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
