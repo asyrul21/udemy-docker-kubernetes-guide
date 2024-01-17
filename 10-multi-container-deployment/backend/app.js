@@ -80,7 +80,7 @@ mongoose.connect(
   /**
    * Using Mongo Atlas as dev and prod database example connection string:
    *
-   * mongodb+srv://demo-user:<password>@cluster0.8ceb7ab.mongodb.net/<dbName>?retryWrites=true&w=majority
+   * mongodb+srv://[user]:<password>@clusterx.xxx.mongodb.net/<dbName>?retryWrites=true&w=majority
    *
    * swap your <dbName> accordingly between dev and prod
    */

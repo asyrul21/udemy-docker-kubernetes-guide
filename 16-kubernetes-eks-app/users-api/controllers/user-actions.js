@@ -1,20 +1,20 @@
-const path = require('path');
-const fs = require('fs');
+const path = require("path");
+const fs = require("fs");
 
-const axios = require('axios');
-const { createAndThrowError, createError } = require('../helpers/error');
+const axios = require("axios");
+const { createAndThrowError, createError } = require("../helpers/error");
 
-const User = require('../models/user');
+const User = require("../models/user");
 
 const validateCredentials = (email, password) => {
   if (
     !email ||
     email.trim().length === 0 ||
-    !email.includes('@') ||
+    !email.includes("@") ||
     !password ||
     password.trim().length < 7
   ) {
-    createAndThrowError('Invalid email or password.', 422);
+    createAndThrowError("Invalid email or password.", 422);
   }
 };
 
@@ -23,40 +23,40 @@ const checkUserExistence = async (email) => {
   try {
     existingUser = await User.findOne({ email: email });
   } catch (err) {
-    createAndThrowError('Failed to create user.', 500);
+    createAndThrowError("Failed to create user.", 500);
   }
 
   if (existingUser) {
-    createAndThrowError('Failed to create user.', 422);
+    createAndThrowError("Failed to create user.", 422);
   }
 };
 
 const getHashedPassword = async (password) => {
   try {
     const response = await axios.get(
-      `http://${process.env.AUTH_API_ADDRESSS}/hashed-pw/${password}`
+      `http://${process.env.AUTH_API_ADDRESS}/hashed-pw/${password}`
     );
     return response.data.hashed;
   } catch (err) {
     const code = (err.response && err.response.status) || 500;
-    createAndThrowError(err.message || 'Failed to create user.', code);
+    createAndThrowError(err.message || "Failed to create user.", code);
   }
 };
 
-const getTokenForUser = async (password, hashedPassword) => {
-  console.log(password, hashedPassword);
+const getTokenForUser = async (password, hashedPassword, uid) => {
   try {
     const response = await axios.post(
-      `http://${process.env.AUTH_API_ADDRESSS}/token`,
+      `http://${process.env.AUTH_API_ADDRESS}/token`,
       {
         password: password,
         hashedPassword: hashedPassword,
+        userId: uid,
       }
     );
     return response.data.token;
   } catch (err) {
     const code = (err.response && err.response.status) || 500;
-    createAndThrowError(err.message || 'Failed to verify user.', code);
+    createAndThrowError(err.message || "Failed to verify user.", code);
   }
 };
 
@@ -94,14 +94,14 @@ const createUser = async (req, res, next) => {
   try {
     savedUser = await newUser.save();
   } catch (err) {
-    const error = createError(err.message || 'Failed to create user.', 500);
+    const error = createError(err.message || "Failed to create user.", 500);
     return next(error);
   }
 
   const logEntry = `${new Date().toISOString()} - ${savedUser.id} - ${email}\n`;
 
   fs.appendFile(
-    path.join('/app', 'users', 'users-log.txt'),
+    path.join("/app", "users", "users-log.txt"),
     logEntry,
     (err) => {
       console.log(err);
@@ -110,7 +110,7 @@ const createUser = async (req, res, next) => {
 
   res
     .status(201)
-    .json({ message: 'User created.', user: savedUser.toObject() });
+    .json({ message: "User created.", user: savedUser.toObject() });
 };
 
 const verifyUser = async (req, res, next) => {
@@ -128,7 +128,7 @@ const verifyUser = async (req, res, next) => {
     existingUser = await User.findOne({ email: email });
   } catch (err) {
     const error = createError(
-      err.message || 'Failed to find and verify user.',
+      err.message || "Failed to find and verify user.",
       500
     );
     return next(error);
@@ -136,7 +136,7 @@ const verifyUser = async (req, res, next) => {
 
   if (!existingUser) {
     const error = createError(
-      'Failed to find and verify user for provided credentials.',
+      "Failed to find and verify user for provided credentials.",
       422
     );
     return next(error);
@@ -144,7 +144,11 @@ const verifyUser = async (req, res, next) => {
 
   try {
     console.log(password, existingUser);
-    const token = await getTokenForUser(password, existingUser.password);
+    const token = await getTokenForUser(
+      password,
+      existingUser.password,
+      existingUser.id
+    );
     res.status(200).json({ token: token, userId: existingUser.id });
   } catch (err) {
     next(err);
@@ -152,11 +156,11 @@ const verifyUser = async (req, res, next) => {
 };
 
 const getLogs = (req, res, next) => {
-  fs.readFile(path.join('/app', 'users', 'users-log.txt'), (err, data) => {
+  fs.readFile(path.join("/app", "users", "users-log.txt"), (err, data) => {
     if (err) {
-      createAndThrowError('Could not open logs file.', 500);
+      createAndThrowError("Could not open logs file.", 500);
     } else {
-      const dataArr = data.toString().split('\n');
+      const dataArr = data.toString().split("\n");
       res.status(200).json({ logs: dataArr });
     }
   });
