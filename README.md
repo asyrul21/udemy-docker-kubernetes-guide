@@ -1082,6 +1082,161 @@ NOTE: You cannot implement multiple Web Servers in one Task, due to conflicting 
 
 3. Create the Task, then Create a Service
 
+## AWS Elastic Kubernetes Service (EKS)
+
+- NOT Free
+
+### General Configuration Setup
+
+1. [Create an EKS Cluster Role](#create-eks-cluster-role-with-iam)
+
+2. [Create a VPC for your Cluster](#create-a-network-vpc-for-your-cluster)
+
+3. Go to AWS > EKS > Create Cluster
+
+- Give a name
+
+- `Cluster Service Role`: select the one you created in (1)
+
+- Under `Specify networking` tab, in `VPC` field, choose the VPC you created in (2)
+
+- `Cluster Endpoint Access`: choose `Public and Private`
+
+4. Click Next and Create
+
+5. Wait Until Active
+
+### Create EKS Cluster Role with IAM
+
+1. Go to AWS > IAM
+
+2. Sidebar- Roles > Create a New Role
+
+- Entity type: `AWS Service`
+
+- Use Case: Choose `EKS`, then Choose `EKS - Cluster`
+
+- Give role a Name
+
+### Create a Network (VPC) for Your Cluster
+
+[Creating a VPC Docs](https://docs.aws.amazon.com/eks/latest/userguide/creating-a-vpc.html#create-vpc)
+
+1. Go to AWS > Cloudformation
+
+2. Click Create Stack (with New Resources)
+
+3. For the `Amazon S3 URL Field`, use the `IPv4` link from the `Creating a VPC Docs` above.
+
+4. Give a Name
+
+5. Create
+
+### Update Kubectl Config to Point to AWS EKS
+
+1. [Backup your original kubectl config](#backing-up-kubectl-original-configs-minikube)
+
+2. Run AWS CLI command:
+
+```bash
+aws eks --region [region] update-kubeconfig --name [cluster name]
+# aws eks --region ap-southeast-1 update-kubeconfig --name kub-eks-demo-cluster
+```
+
+If you get permission error `(AccessDeniedException) when calling the DescribeCluster operation`. See [this thread](https://stackoverflow.com/questions/56011492/accessdeniedexception-creating-eks-cluster-user-is-not-authorized-to-perform).
+
+### Adding a Worker Node to EKS Cluster
+
+1. Create a IAM Compute Role
+
+- Go to AWS > IAM > Roles > Create Role
+
+- Use Case: `EC2`
+
+- Attach policy: `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOly`
+
+2. In your cluster, go to `Compute` tab > `Add Node Group`
+
+- Give a Name
+
+- For `Node IAM Role` field, add the role you created in 1.
+
+### Getting Your VPC CIDR
+
+1. Go to AWS > VPC > Select Your VPC
+
+2. Copy the `IPv4 CIDR`
+
+### Adding a (AWS EFS) CSI Volume
+
+[Create EFS CSI Driver](https://github.com/kubernetes-sigs/aws-efs-csihttps://github.com/kubernetes-sigs/aws-efs-csi-driver/tree/master)
+
+1. Install the EFS CSI Driver by going to AWS EKS Cluster > Add On > Add the `aws-efs-csi-driver` add on
+
+2. Create Volume Security Group
+
+- In AWS > EC2 > Security Groups > Create Security Group
+
+- Give a name
+
+- Select your EKS VPC you created in [here](#create-a-network-vpc-for-your-cluster)
+
+- In Inbound Rule > Add Rule. Type: NFS. Source: Custom & CIDR Blocks - Add your VPC CIDR from [VPC CIDR](#getting-your-vpc-cidr).
+
+- Create Security Group
+
+3. Create an EFS
+
+- In AWS > EFS > Create File System
+
+- Give a name
+
+- Add your EKS VPC
+
+- CLICK `Customize`
+
+- Under `Network`, in `Availability Zones`, remove the default security groups. Use the ones you created on step 2. For both.
+
+- Create
+
+- Copy the `File System ID`
+
+3. Compose your deployment resources in `users.yaml`
+
+4. Install Driver:
+
+- Go to Your Cluster > Add On > Add the `aws-efs-csi-driver` add on
+
+5. Go to IAM > Your User that uses the EKS > Attach Policy Directly `AmazonEFSCSIDriverPolicy`
+
+### Get Error Logs in EKS Pods
+
+```bash
+kubectl get nodes -v=10
+```
+
+### AWS EKS - Kubectl Connection Unauthorized Error
+
+Once you have [Updated Your Kubectl Config](#update-kubectl-config-to-point-to-aws-eks), you then run `kubectl get pods` to check if connection works.
+
+If you get this error: `You must be logged in to the server (the server has asked for the client to provide credentials)`
+
+Read These articles:
+
+https://repost.aws/knowledge-center/eks-api-server-unauthorized-error
+
+[Checking pod error](#get-error-logs-in-eks-pods) might also help.
+
+What we did:
+
+1. In your AWS > EKS > Click the `Access` tab.
+
+2. Under the `IAM Access Entries`, click `Create Access Entry`
+
+3. Search for the User which you would like to give access.
+
+4. Under `Add Access Policy`, add `AmazonEKSClusterAdminPolicy` policy.
+
 # Kubernetes
 
 General Concepts:
@@ -1716,6 +1871,18 @@ Two types:
 
   See `15-kubernetes-network-multi-pod/kubernetes/users-deployment.yaml`
 
+## Backing Up Kubectl Original Configs (Minikube)
+
+1. Find your `.kube` file. In both Windows and MacOS, you can find it in your `user` folder.
+
+2. Navigate into it `cd ~/.kube`
+
+3. Open it the `config`
+
+4. Duplicate that file.
+
+5. Rename the original file to `config_minikube` to keep original configurations.
+
 # References
 
 1. [Installing Docker on Linux Servers](https://docs.docker.com/engine/install/)
@@ -1725,6 +1892,8 @@ Two types:
 3. [Kubermatic](https://www.kubermatic.com/)
 
 4. [Core DNS](https://coredns.io/)
+
+5. [KOPS](https://kops.sigs.k8s.io/)
 
 # Other Notes
 
@@ -1748,3 +1917,23 @@ Allows requests to be sent to it self.
 See `15-kubernetes-network-multi-pod/frontend/conf/nginx.conf`
 
 NGINX Config Files Are Run in the Cluster. Therefore, you need to use Cluster Internal IP. Or, just use automatically assigned domain names.
+
+## Installing AWS CLI
+
+See [Docs](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+
+Check:
+
+```bash
+aws --version
+```
+
+## Configure AWS Credentials
+
+1. Run `aws configure`
+
+2. Grab your AWS Account Access Keys.
+
+3. If you dont have one, go to AWS > Top Right (click your name) > `Security Credentials`
+
+4. Insert Your Region

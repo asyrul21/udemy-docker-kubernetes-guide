@@ -54,5 +54,4 @@ docker push user/kub-demo-frontend
 kubectl apply -f=frontend-deployment.yaml -f=frontend-service.yaml
 
 minikube service frontend-service
-
 ```

@@ -1,0 +1,78 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+#
+# received from: https://github.com/kubernetes-sigs/aws-efs-csi-driver/blob/master/examples/kubernetes/static_provisioning/specs/storageclass.yaml
+#
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: efs-pv
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: fs-072baaa645642f11a
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: efs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-service
+spec:
+  selector:
+    app: users
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: users
+  template:
+    metadata:
+      labels:
+        app: users
+    spec:
+      containers:
+        - name: users-api
+          image: asyrul21/kub-eks-users:latest
+          env:
+            - name: MONGODB_CONNECTION_URI
+              value: "mongodb+srv://[user]:[password]@clusterx.xxx.mongodb.net/eks-demo-app?retryWrites=true&w=majority"
+            - name: AUTH_API_ADDRESSS
+              value: "auth-service.default:3000"
+          volumeMounts:
+            - name: efs-vol
+              mountPath: /app/users
+      volumes:
+        - name: efs-vol
+          persistentVolumeClaim:
+            claimName: efs-pvc
